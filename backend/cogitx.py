@@ -144,8 +144,15 @@ def run_screening(files: list[tuple[str, bytes]]) -> dict:
     report = _extract_text(data)
 
     output = data.get("output", {}) or {}
-    candidates = output.get("candidates")
-    results = output.get("results")
+    variables = output.get("variables", {}) or {}
+    # results/candidates live under output.variables in this workflow version;
+    # fall back to top-level output in case a version puts them there.
+    results = variables.get("results")
+    if not isinstance(results, list):
+        results = output.get("results")
+    candidates = variables.get("candidates")
+    if not isinstance(candidates, list):
+        candidates = output.get("candidates")
     candidates = candidates if isinstance(candidates, list) else []
     results = results if isinstance(results, list) else []
     return {
