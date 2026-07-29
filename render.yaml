@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: resume-screening-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: COGITX_BASE_URL
+        sync: false
+      - key: COGITX_EXPORT_ID
+        sync: false
+      - key: COGITX_CLIENT_ID
+        sync: false
+      - key: COGITX_CLIENT_SECRET
+        sync: false
+      - key: KPI_TRIGGER_MESSAGE
+        value: show kpi dashboard
+      - key: FRONTEND_ORIGINS
+        sync: false
