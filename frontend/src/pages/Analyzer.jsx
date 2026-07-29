@@ -150,6 +150,26 @@ export default function Analyzer() {
           </div>
         </>
       )}
+
+      {cards.length === 0 && report && (
+        <div className="card" style={{ marginTop: 16 }}>
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              marginBottom: 4,
+            }}
+          >
+            <p style={{ fontWeight: 600, fontSize: 15 }}>Screening report</p>
+            <span className="badge green">Complete</span>
+          </div>
+          <div
+            className="sc-report"
+            dangerouslySetInnerHTML={{ __html: marked.parse(report) }}
+          />
+        </div>
+      )}
     </>
   );
 }
@@ -247,15 +267,72 @@ function ScoreCard({ c, isOpen, onToggle, detailHtml }) {
             </div>
           )}
 
-          {detailHtml && (
-            <div
-              className="sc-report"
-              dangerouslySetInnerHTML={{ __html: detailHtml }}
-            />
+          {hasStructuredDetail(c) ? (
+            <div className="sc-report">
+              {c.scores_line && (
+                <p>
+                  <strong>Scores:</strong> {c.scores_line}
+                </p>
+              )}
+              {c.verdict && (
+                <p>
+                  <strong>Verdict:</strong> {c.verdict}
+                </p>
+              )}
+              {(c.interview_questions?.technical?.length > 0 ||
+                c.interview_questions?.behavioral?.length > 0) && (
+                <>
+                  <p>
+                    <strong>Interview Questions</strong>
+                  </p>
+                  {c.interview_questions?.technical?.length > 0 && (
+                    <>
+                      <p>
+                        <em>Technical</em>
+                      </p>
+                      <ol>
+                        {c.interview_questions.technical.map((q, i) => (
+                          <li key={i}>{q}</li>
+                        ))}
+                      </ol>
+                    </>
+                  )}
+                  {c.interview_questions?.behavioral?.length > 0 && (
+                    <>
+                      <p>
+                        <em>Behavioral</em>
+                      </p>
+                      <ol>
+                        {c.interview_questions.behavioral.map((q, i) => (
+                          <li key={i}>{q}</li>
+                        ))}
+                      </ol>
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          ) : (
+            detailHtml && (
+              <div
+                className="sc-report"
+                dangerouslySetInnerHTML={{ __html: detailHtml }}
+              />
+            )
           )}
         </div>
       )}
     </div>
+  );
+}
+
+// True when the card carries structured detail fields (new JSON format).
+function hasStructuredDetail(c) {
+  return Boolean(
+    c.verdict ||
+      c.scores_line ||
+      c.interview_questions?.technical?.length ||
+      c.interview_questions?.behavioral?.length
   );
 }
 
@@ -269,23 +346,41 @@ function ScoreCard({ c, isOpen, onToggle, detailHtml }) {
 function extractDetail(report, name) {
   if (!report || !name) return "";
   const lines = report.split("\n");
-  const first = name.split(" ")[0];
+  const nameLC = name.toLowerCase();
+  const firstLC = name.split(" ")[0].toLowerCase();
 
-  // A "candidate header" is either a ### heading, or a bold line formatted like
-  // **Name** — Role — Score (must contain an em/en dash to distinguish it from
-  // bold field labels such as **Matched:** or **Verdict:**).
-  const isHeader = (l) => {
+  // A "candidate detail header" is a bold line formatted like
+  // **Name** — Role — Score. This is where the per-candidate detail
+  // (scores, verdict, interview questions) actually lives.
+  const isBoldCandidateHeader = (l) => {
     const t = l.trim();
-    if (t.startsWith("###")) return true;
     return /^\*\*[A-Z]/.test(t) && /[—–-]/.test(t) && !/:/.test(t.slice(0, 40));
   };
-  const namesThis = (l) => l.includes(name) || l.includes(first);
+  // Any header (### or bold candidate) ends a section.
+  const isHeader = (l) => {
+    const t = l.trim();
+    return t.startsWith("###") || isBoldCandidateHeader(l);
+  };
+  const namesThis = (l) => {
+    const lc = l.toLowerCase();
+    return lc.includes(nameLC) || lc.includes(firstLC);
+  };
 
+  // Prefer a bold candidate header that names this person (the detail block).
+  // Fall back to any header that names them.
   let start = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (isHeader(lines[i]) && namesThis(lines[i])) {
+    if (isBoldCandidateHeader(lines[i]) && namesThis(lines[i])) {
       start = i;
       break;
+    }
+  }
+  if (start === -1) {
+    for (let i = 0; i < lines.length; i++) {
+      if (isHeader(lines[i]) && namesThis(lines[i])) {
+        start = i;
+        break;
+      }
     }
   }
   if (start === -1) return "";
@@ -310,7 +405,7 @@ function extractDetail(report, name) {
   while (chunk.length && junk(chunk[chunk.length - 1])) chunk.pop();
   while (chunk.length && junk(chunk[0])) chunk.shift();
   // If a trailing "That's the batch"-style wrap-up leaked in (last candidate),
-  // cut it at the closing divider or the wrap-up sentence.
+  // cut it at the wrap-up sentence.
   const wrapIdx = chunk.findIndex((l) => /^That'?s the batch/i.test(l.trim()));
   if (wrapIdx !== -1) chunk = chunk.slice(0, wrapIdx);
   while (chunk.length && junk(chunk[chunk.length - 1])) chunk.pop();
