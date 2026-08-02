@@ -45,7 +45,7 @@ export default function App() {
 
         <div className="sidebar-footer">
           <div className="avatar">Y</div>
-          {!collapsed && <span>Yuvakshi</span>}
+          {!collapsed && <span>Admin</span>}
         </div>
       </aside>
 

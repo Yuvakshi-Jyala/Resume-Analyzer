@@ -119,7 +119,49 @@ def parse_interviews(text: str):
         for d, t, n, r in pattern.findall(text)
     ]
 
+def parse_interviews(text: str):
+    """Pull '- {date} at {time} — {name} ({role})' lines from the summary."""
+    pattern = re.compile(
+        r"[-*]\s*(\d{4}-\d{2}-\d{2})\s+at\s+([\d: ]+[APap][Mm])\s*[—-]+\s*(.+?)\s*\((.+?)\)"
+    )
+    return [
+        {"date": d, "time": t.strip(), "name": n.strip(), "role": r.strip()}
+        for d, t, n, r in pattern.findall(text)
+    ]
 
+# vvv ADD THE TWO NEW THINGS HERE vvv
+
+_CANDIDATE_LINE_RE = re.compile(
+    r"^-\s*(?P<role>[^|]+)\|\s*(?P<name>[^|]+)\|\s*(?P<status>[^|]+?)"
+    r"(?:\s*\|\s*(?P<idate>\d{4}-\d{2}-\d{2})\s+at\s+(?P<itime>[^|]+?))?"
+    r"(?:\s*\|\s*score:\s*(?P<score>[\d.]+))?\s*$"
+)
+
+
+def parse_all_candidates(text: str):
+    m = re.search(r"###\s*All Candidates\s*\n(.*?)(?=\n###|\Z)", text, re.DOTALL)
+    if not m:
+        return {}
+    by_role: dict[str, list] = {}
+    for line in m.group(1).splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        cm = _CANDIDATE_LINE_RE.match(line)
+        if not cm:
+            continue
+        role = cm.group("role").strip()
+        score_raw = cm.group("score")
+        by_role.setdefault(role, []).append({
+            "name": cm.group("name").strip(),
+            "status": cm.group("status").strip(),
+            "interview_date": cm.group("idate"),
+            "interview_time": (cm.group("itime") or "").strip() or None,
+            "score": float(score_raw) if score_raw else None,
+        })
+    return by_role
+
+# ^^^ END ADDITION ^^^
 @app.get("/api/kpi")
 def kpi():
     text = cogitx.run_kpi()
@@ -127,6 +169,7 @@ def kpi():
         "raw_text": text,
         "roles": parse_role_breakdown(text) or [],
         "interviews": parse_interviews(text),
+        "candidates_by_role": parse_all_candidates(text),
     }
 
 
