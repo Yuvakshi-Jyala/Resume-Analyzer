@@ -195,7 +195,7 @@ function ScoreCard({ c, isOpen, onToggle, detailHtml }) {
         </div>
         <div className="sc-right">
           {typeof c.fit_score === "number" && (
-            <span className="sc-score">{c.fit_score}</span>
+            <span className="sc-score">{c.fit_score}%</span>
           )}
           {c.band && (
             <span className={`sc-band ${BAND_CLASS[c.band] || ""}`}>
