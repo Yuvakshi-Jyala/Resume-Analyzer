@@ -8,7 +8,8 @@ load_dotenv()  # read backend/.env before anything reads os.getenv
 
 from fastapi import FastAPI, File, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-
+from db import applicants
+from stats import recalc_stats, get_stats
 import cogitx
 
 # Comma-separated list of allowed frontend origins. Locally we default to the
@@ -163,13 +164,14 @@ def parse_all_candidates(text: str):
 
 # ^^^ END ADDITION ^^^
 @app.get("/api/kpi")
-def kpi():
-    text = cogitx.run_kpi()
+async def kpi():
+    stats = await get_stats()
+    if not stats:
+        stats = await recalc_stats()
     return {
-        "raw_text": text,
-        "roles": parse_role_breakdown(text) or [],
-        "interviews": parse_interviews(text),
-        "candidates_by_role": parse_all_candidates(text),
+        "roles": stats.get("roles", []),
+        "interviews": stats.get("interviews", []),
+        "candidates_by_role": stats.get("candidates_by_role", {}),
     }
 
 
@@ -177,5 +179,24 @@ def kpi():
 async def screen(files: list[UploadFile] = File(...)):
     blobs = [(f.filename, await f.read()) for f in files[:5]]
     result = cogitx.run_screening(blobs)
-    # result = {report, candidates, results}
+
+    for card in result.get("cards", []):
+        name = card.get("name")
+        if not name:
+            continue
+        applicant = {
+            "name": name,
+            "role": card.get("role", ""),
+            "status": "Shortlisted" if (card.get("fit_score") or 0) >= 65 else "Applied",
+            "interview_date": None,
+            "interview_time": None,
+            "score": card.get("fit_score"),
+        }
+        await applicants.update_one(
+            {"name": name, "role": applicant["role"]},
+            {"$set": applicant},
+            upsert=True,
+        )
+
+    await recalc_stats()
     return result
